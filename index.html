@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jyoti Kirana Store</title>
+    <style>
+        /* Previous styles remain the same */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+        }
+        main {
+            flex: 1;
+            padding: 1rem;
+        }
+        .logo {
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 1rem;
+        }
+        .options {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 1rem;
+        }
+        .option, .product-form button, .edit-delete-buttons button {
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 0.5rem;
+        }
+        .search-bar, .product-form input, .product-form textarea {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .product-item, #fileStatus {
+            margin-top: 1rem;
+            border: 1px solid #ddd;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+        .edit-delete-buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+        .edit-delete-buttons button.delete {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">JKS</div>
+        <h1>Jyoti Kirana Store</h1>
+    </header>
+    <main>
+        <div class="options">
+            <button class="option" onclick="showSearch()">Search</button>
+            <button class="option" onclick="showAddProduct()">Add Product</button>
+            <button class="option" onclick="showEditProducts()">Edit Products</button>
+        </div>
+        <div id="fileStatus"></div>
+
+        <div id="searchSection" style="display:none;">
+            <input type="text" id="searchBar" class="search-bar" placeholder="Search products...">
+            <div id="searchResults"></div>
+        </div>
+
+        <div id="addProductSection" style="display:none;">
+            <form id="productForm" class="product-form">
+                <input type="text" id="productName" placeholder="Product Name" required>
+                <textarea id="productDescription" placeholder="Product Description" required></textarea>
+                <input type="number" id="productPrice" placeholder="Product Price" step="0.01" required>
+                <button type="submit">Add Product</button>
+            </form>
+        </div>
+
+        <div id="editProductsSection" style="display:none;">
+            <input type="text" id="editSearchBar" class="search-bar" placeholder="Search products to edit...">
+            <div id="editSearchResults"></div>
+        </div>
+    </main>
+
+    <script>
+        let products = [];
+        const API_KEY = '$2a$10$db91TvuYcaAW72aICytQiOjEDDKoo1XPdPtfaKJbioJoCbMPDAitC'; 
+        const BIN_ID = '67151250e41b4d34e445ed18'; 
+        const DB_NAME = 'Untitled';
+        const STORE_NAME = 'products';
+        let db;
+
+        const dbPromise = indexedDB.open(DB_NAME, 1);
+        dbPromise.onupgradeneeded = event => {
+            db = event.target.result;
+            db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        };
+        dbPromise.onsuccess = event => {
+            db = event.target.result;
+            loadProducts();
+        };
+
+        async function loadProducts() {
+            try {
+                const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+                    headers: { 'X-Master-Key': API_KEY }
+                });
+                const data = await response.json();
+                products = data.record.products;
+                updateFileStatus('Products loaded successfully');
+                saveToIndexedDB(products);
+            } catch (error) {
+                console.error('Error loading products:', error);
+                products = await getFromIndexedDB();
+                updateFileStatus('Loaded from local storage');
+            }
+        }
+
+        async function saveProducts() {
+            try {
+                await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': API_KEY
+                    },
+                    body: JSON.stringify({ products })
+                });
+                updateFileStatus('Products saved to server');
+                saveToIndexedDB(products);
+            } catch (error) {
+                console.error('Error saving products:', error);
+                updateFileStatus('Saved to local storage');
+            }
+        }
+
+        function showSearch() {
+            document.getElementById('searchSection').style.display = 'block';
+            document.getElementById('addProductSection').style.display = 'none';
+            document.getElementById('editProductsSection').style.display = 'none';
+        }
+
+        function showAddProduct() {
+            document.getElementById('searchSection').style.display = 'none';
+            document.getElementById('addProductSection').style.display = 'block';
+            document.getElementById('editProductsSection').style.display = 'none';
+        }
+
+        function showEditProducts() {
+            document.getElementById('searchSection').style.display = 'none';
+            document.getElementById('addProductSection').style.display = 'none';
+            document.getElementById('editProductsSection').style.display = 'block';
+            displayEditProducts(products);
+        }
+
+        document.getElementById('productForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const product = {
+                id: Date.now(),
+                name: document.getElementById('productName').value,
+                description: document.getElementById('productDescription').value,
+                price: parseFloat(document.getElementById('productPrice').value)
+            };
+            products.push(product);
+            saveProducts();
+            alert('Product added successfully!');
+            this.reset();
+        });
+
+        async function saveToIndexedDB(products) {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            store.clear();
+            products.forEach(product => store.add(product));
+        }
+
+        async function getFromIndexedDB() {
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            return store.getAll();
+        }
+
+        function updateFileStatus(message) {
+            document.getElementById('fileStatus').textContent = message;
+        }
+
+        document.getElementById('searchBar').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const searchResults = products.filter(product => 
+                product.name.toLowerCase().includes(searchTerm) ||
+                product.description.toLowerCase().includes(searchTerm)
+            );
+            displaySearchResults(searchResults);
+        });
+
+        function displaySearchResults(results) {
+            const searchResultsDiv = document.getElementById('searchResults');
+            searchResultsDiv.innerHTML = '';
+            if (results.length === 0) {
+                searchResultsDiv.innerHTML = '<p>No products found.</p>';
+            } else {
+                results.forEach(product => {
+                    const productDiv = document.createElement('div');
+                    productDiv.className = 'product-item';
+                    productDiv.innerHTML = `
+                        <h3>${product.name}</h3>
+                        <p>${product.description}</p>
+                        <p>Price: ₹${product.price.toFixed(2)}</p>
+                    `;
+                    searchResultsDiv.appendChild(productDiv);
+                });
+            }
+        }
+
+        // New code for edit functionality
+        document.getElementById('editSearchBar').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const searchResults = products.filter(product => 
+                product.name.toLowerCase().includes(searchTerm) ||
+                product.description.toLowerCase().includes(searchTerm)
+            );
+            displayEditProducts(searchResults);
+        });
+
+        function displayEditProducts(products) {
+            const editSearchResultsDiv = document.getElementById('editSearchResults');
+            editSearchResultsDiv.innerHTML = '';
+            if (products.length === 0) {
+                editSearchResultsDiv.innerHTML = '<p>No products found.</p>';
+            } else {
+                products.forEach(product => {
+                    const productDiv = document.createElement('div');
+                    productDiv.className = 'product-item';
+                    productDiv.innerHTML = `
+                        <h3>${product.name}</h3>
+                        <p>${product.description}</p>
+                        <p>Price: ₹${product.price.toFixed(2)}</p>
+                        <div class="edit-delete-buttons">
+                            <button onclick="editProduct(${product.id})">Edit</button>
+                            <button class="delete" onclick="deleteProduct(${product.id})">Delete</button>
+                        </div>
+                    `;
+                    editSearchResultsDiv.appendChild(productDiv);
+                });
+            }
+        }
+
+        function editProduct(id) {
+            const product = products.find(p => p.id === id);
+            if (product) {
+                const newName = prompt('Enter new name:', product.name);
+                const newDescription = prompt('Enter new description:', product.description);
+                const newPrice = prompt('Enter new price:', product.price);
+
+                if (newName !== null) product.name = newName;
+                if (newDescription !== null) product.description = newDescription;
+                if (newPrice !== null && !isNaN(newPrice)) product.price = parseFloat(newPrice);
+
+                saveProducts();
+                displayEditProducts(products);
+            }
+        }
+
+        function deleteProduct(id) {
+            if (confirm('Are you sure you want to delete this product?')) {
+                products = products.filter(p => p.id !== id);
+                saveProducts();
+                displayEditProducts(products);
+            }
+        }
+    </script>
+</body>
+</html>
